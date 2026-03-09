@@ -1,0 +1,90 @@
+# -*- coding: utf-8 -*-
+
+import re
+from Autodesk.Revit.DB import *
+from pyrevit import revit, script
+
+doc = revit.doc
+uidoc = revit.uidoc
+output = script.get_output()
+
+selection_ids = uidoc.Selection.GetElementIds()
+
+if not selection_ids:
+    print("Please select one or more sheets in Project Browser.")
+    script.exit()
+
+# -------------------------------
+# Function for Natural Sorting
+# -------------------------------
+
+def natural_sort_key(text):
+    return [int(c) if c.isdigit() else c.lower()
+            for c in re.split('([0-9]+)', text)]
+
+# -------------------------------
+# Collect Selected Sheets
+# -------------------------------
+
+sheets = []
+
+for elid in selection_ids:
+    element = doc.GetElement(elid)
+    if isinstance(element, ViewSheet):
+        sheets.append(element)
+
+if not sheets:
+    print("No valid sheets selected.")
+    script.exit()
+
+# Sort sheets naturally
+sheets = sorted(sheets, key=lambda s: natural_sort_key(s.SheetNumber))
+
+# -------------------------------
+# Collect All Viewports Once
+# -------------------------------
+
+all_viewports = FilteredElementCollector(doc)\
+    .OfClass(Viewport)\
+    .ToElements()
+
+print("========================================================")
+
+# -------------------------------
+# Process Sheets
+# -------------------------------
+
+for sheet in sheets:
+
+    print("SHEET: {} - {}".format(sheet.SheetNumber, sheet.Name))
+    print("--------------------------------------------------------")
+
+    views_on_sheet = []
+
+    for vp in all_viewports:
+        if vp.SheetId == sheet.Id:
+            view = doc.GetElement(vp.ViewId)
+            views_on_sheet.append(view)
+
+    # Sort views by name (natural)
+    views_on_sheet = sorted(
+        views_on_sheet,
+        key=lambda v: natural_sort_key(v.Name)
+    )
+
+    if not views_on_sheet:
+        print("No views placed on this sheet.")
+
+    for view in views_on_sheet:
+
+        if view.ViewTemplateId != ElementId.InvalidElementId:
+            template = doc.GetElement(view.ViewTemplateId)
+            template_name = template.Name
+        else:
+            template_name = "No Template Assigned"
+
+        print("View: {}".format(view.Name))
+        print("Template: {}".format(template_name))
+        print("-----")
+
+    print("========================================================")
